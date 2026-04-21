@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Claude Issue Tracker</title>
+<style>
+  :root {
+    --bg: #1d2021; --panel: #282828; --border: #3c3836;
+    --fg: #ebdbb2; --muted: #928374; --accent: #83a598;
+    --green: #98971a; --red: #cc241d;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg); color: var(--fg);
+    font: 14px/1.4 -apple-system, "SF Pro Text", system-ui, sans-serif;
+    display: grid;
+    grid-template-columns: var(--sidebar-w, 380px) 4px 1fr;
+    height: 100vh;
+  }
+  body.resizing { cursor: col-resize; user-select: none; }
+  body.resizing iframe { pointer-events: none; }
+  .resizer {
+    background: transparent;
+    cursor: col-resize;
+    position: relative;
+  }
+  .resizer:hover, .resizer.dragging { background: var(--accent); }
+  aside {
+    border-right: 1px solid var(--border);
+    background: var(--panel);
+    overflow-y: auto;
+    display: flex; flex-direction: column;
+  }
+  header {
+    padding: 12px 16px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  header h1 { margin: 0; font-size: 14px; font-weight: 600; }
+  header button {
+    background: transparent; color: var(--muted); border: 1px solid var(--border);
+    padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px;
+  }
+  header button:hover { color: var(--fg); border-color: var(--accent); }
+  ul#issues, ul#other-sessions { list-style: none; padding: 0; margin: 0; }
+  .section-header {
+    padding: 10px 16px 6px; font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted);
+    border-top: 1px solid var(--border); margin-top: 8px;
+  }
+  li.issue {
+    padding: 10px 16px; border-bottom: 1px solid var(--border);
+    cursor: pointer; display: flex; gap: 8px; align-items: flex-start;
+  }
+  li.issue:hover { background: rgba(255,255,255,0.03); }
+  li.issue.active { background: rgba(79,140,255,0.1); border-left: 2px solid var(--accent); padding-left: 14px; }
+  .dot { flex: 0 0 8px; height: 8px; width: 8px; border-radius: 50%; margin-top: 6px; background: var(--muted); }
+  .dot.alive { background: var(--green); }
+  .meta { flex: 1; min-width: 0; }
+  .meta .title { font-weight: 500; color: var(--fg); display: block; word-wrap: break-word; }
+  .meta .sub { color: var(--muted); font-size: 12px; margin-top: 2px; display: flex; gap: 8px; align-items: center; }
+  .meta .sub a { color: var(--muted); text-decoration: none; }
+  .meta .sub a:hover { color: var(--accent); }
+  .meta .iid { color: var(--muted); font-weight: 400; text-decoration: none; margin-right: 4px; }
+  .meta .iid:hover { color: var(--accent); }
+  main { display: flex; flex-direction: column; min-width: 0; }
+  main .placeholder {
+    margin: auto; color: var(--muted); text-align: center;
+  }
+  iframe { border: 0; flex: 1; width: 100%; background: black; }
+  .pane { display: none; flex-direction: column; flex: 1; min-height: 0; }
+  .pane.active { display: flex; }
+  .toolbar {
+    padding: 8px 16px; border-bottom: 1px solid var(--border);
+    display: flex; gap: 12px; align-items: center; background: var(--panel);
+  }
+  .toolbar .title { font-weight: 500; }
+  .toolbar .url { color: var(--muted); font-size: 12px; }
+  .toolbar a { color: var(--accent); text-decoration: none; font-size: 12px; }
+  .toolbar button {
+    background: transparent; color: var(--accent); border: 1px solid var(--border);
+    padding: 3px 8px; border-radius: 4px; font-size: 12px; cursor: pointer;
+  }
+  .toolbar button:hover:not(:disabled) { border-color: var(--accent); }
+  .toolbar button:disabled { color: var(--muted); cursor: default; }
+  .err { color: var(--red); padding: 16px; }
+</style>
+</head>
+<body>
+<aside>
+  <header>
+    <h1>Issues</h1>
+    <button id="refresh">Refresh</button>
+  </header>
+  <ul id="issues"><li style="padding: 16px; color: var(--muted);">Loading…</li></ul>
+  <div class="section-header" id="other-header" style="display:none">Other tmux sessions</div>
+  <ul id="other-sessions"></ul>
+</aside>
+<div class="resizer" id="resizer" title="Drag to resize"></div>
+<main id="main">
+  <div class="placeholder" id="placeholder">Select an issue to open its Claude session</div>
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>
