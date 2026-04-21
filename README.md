@@ -66,7 +66,7 @@ hook entries by appending alongside them):
     "SessionStart":     [{"matcher": "", "hooks": [{"type": "command", "command": "/Users/christoph/workspace/claude-issue-tracker/hooks/claude-status-hook.sh", "timeout": 5}]}],
     "UserPromptSubmit": [{"matcher": "", "hooks": [{"type": "command", "command": "/Users/christoph/workspace/claude-issue-tracker/hooks/claude-status-hook.sh", "timeout": 5}]}],
     "Stop":             [{"matcher": "", "hooks": [{"type": "command", "command": "/Users/christoph/workspace/claude-issue-tracker/hooks/claude-status-hook.sh", "timeout": 5}]}],
-    "Notification":     [{"matcher": "", "hooks": [{"type": "command", "command": "/Users/christoph/workspace/claude-issue-tracker/hooks/claude-status-hook.sh", "timeout": 5}]}],
+    "Notification":     [{"matcher": "permission_prompt", "hooks": [{"type": "command", "command": "/Users/christoph/workspace/claude-issue-tracker/hooks/claude-status-hook.sh", "timeout": 5}]}],
     "SessionEnd":       [{"matcher": "", "hooks": [{"type": "command", "command": "/Users/christoph/workspace/claude-issue-tracker/hooks/claude-status-hook.sh", "timeout": 5}]}]
   }
 }
