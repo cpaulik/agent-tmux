@@ -43,11 +43,15 @@ function renderIssues(issues) {
     li.className = "issue";
     if (activeSlot === slotKey) li.classList.add("active");
     const alive = i.tmux_session || i.ttyd_port;
+    const stateBadge = i.claude_state
+      ? ` <span class="state claude-${i.claude_state}" title="claude: ${i.claude_state}">${i.claude_state}</span>` : "";
     const sub = i.tmux_session
-      ? `<div class="sub"><span title="tmux session">⎇ ${escapeHtml(i.tmux_session)}</span></div>`
+      ? `<div class="sub"><span title="tmux session">⎇ ${escapeHtml(i.tmux_session)}</span>${stateBadge}</div>`
       : "";
+    const dotClass = i.claude_state
+      ? `claude-${i.claude_state}` : (alive ? "alive" : "");
     li.innerHTML = `
-      <span class="dot ${alive ? "alive" : ""}"></span>
+      <span class="dot ${dotClass}"></span>
       <div class="meta">
         <span class="title">
           <a href="${i.web_url}" class="iid" target="_blank" rel="noreferrer">#${i.iid}</a>
@@ -56,6 +60,8 @@ function renderIssues(issues) {
         ${sub}
       </div>`;
     li.dataset.slot = slotKey;
+    if (i.tmux_session) li.dataset.session = i.tmux_session;
+    li.dataset.claudeTs = String(i.claude_ts || 0);
     li.addEventListener("click", (ev) => {
       if (ev.target.closest("a")) return;  // let link clicks fall through
       openIssue(i);
@@ -181,12 +187,19 @@ function renderOtherSessions(items) {
     const li = document.createElement("li");
     li.className = "issue other";
     if (activeSlot === slotKey) li.classList.add("active");
+    const dotClass = s.claude_state
+      ? `claude-${s.claude_state}` : (s.ttyd_port ? "alive" : "");
+    const stateBadge = s.claude_state
+      ? `<div class="sub"><span class="state claude-${s.claude_state}" title="claude: ${s.claude_state}">${s.claude_state}</span></div>` : "";
     li.innerHTML = `
-      <span class="dot ${s.ttyd_port ? "alive" : ""}"></span>
+      <span class="dot ${dotClass}"></span>
       <div class="meta">
         <span class="title">${escapeHtml(s.name)}</span>
+        ${stateBadge}
       </div>`;
     li.dataset.slot = slotKey;
+    li.dataset.session = s.name;
+    li.dataset.claudeTs = String(s.claude_ts || 0);
     if (s.openable) {
       li.addEventListener("click", () => openOther(s.name));
     } else {
@@ -199,9 +212,69 @@ function renderOtherSessions(items) {
 
 async function refreshAll() { await Promise.all([loadIssues(), loadOtherSessions()]); }
 
+// Light-weight poll: just claude state+ts per tmux session. Updates dot/badge
+// classes in place AND reorders list items so the most recently active session
+// floats to the top of its list (issues and other-sessions sort independently).
+async function refreshClaudeStates() {
+  try {
+    const res = await fetch("/api/claude-states");
+    if (!res.ok) return;
+    const data = await res.json();  // { session: { state, ts } }
+    document.querySelectorAll("li.issue, li.other").forEach(li => {
+      const sess = li.dataset.session;
+      if (!sess) return;
+      const rec = data[sess] || null;
+      const state = rec ? rec.state : null;
+      // Stash ts for sorting; items without activity get 0 → end of list.
+      li.dataset.claudeTs = rec ? String(rec.ts) : "0";
+      const dot = li.querySelector(".dot");
+      if (dot) {
+        dot.classList.remove("claude-idle", "claude-working", "claude-waiting");
+        if (state) {
+          dot.classList.remove("alive");
+          dot.classList.add(`claude-${state}`);
+        }
+      }
+      const sub = li.querySelector(".meta .sub");
+      let badge = li.querySelector(".meta .sub .state");
+      if (state) {
+        if (!badge && sub) {
+          badge = document.createElement("span");
+          sub.appendChild(document.createTextNode(" "));
+          sub.appendChild(badge);
+        }
+        if (badge) {
+          badge.className = `state claude-${state}`;
+          badge.title = `claude: ${state}`;
+          badge.textContent = state;
+        }
+      } else if (badge) {
+        badge.remove();
+      }
+    });
+    reorderListByActivity(issuesEl);
+    reorderListByActivity(otherEl);
+  } catch { /* ignore */ }
+}
+
+// Stable-sort children of `ul` by claudeTs desc; ties keep original order.
+function reorderListByActivity(ul) {
+  const items = Array.from(ul.children);
+  if (items.length < 2) return;
+  const decorated = items.map((el, idx) => ({
+    el, idx, ts: parseFloat(el.dataset.claudeTs || "0") || 0,
+  }));
+  decorated.sort((a, b) => (b.ts - a.ts) || (a.idx - b.idx));
+  // Only reattach if order actually changed (avoids layout churn).
+  const changed = decorated.some((d, i) => d.el !== items[i]);
+  if (!changed) return;
+  for (const d of decorated) ul.appendChild(d.el);
+}
+
 refreshBtn.addEventListener("click", refreshAll);
 refreshAll();
 setInterval(refreshAll, 30000);
+setInterval(refreshClaudeStates, 2000);
 
 // Resizable sidebar (persisted in localStorage)
 const SIDEBAR_KEY = "issue-tracker:sidebar-w";

@@ -56,6 +56,15 @@
   li.issue.active { background: rgba(79,140,255,0.1); border-left: 2px solid var(--accent); padding-left: 14px; }
   .dot { flex: 0 0 8px; height: 8px; width: 8px; border-radius: 50%; margin-top: 6px; background: var(--muted); }
   .dot.alive { background: var(--green); }
+  /* Claude session states (overrides .alive when present). */
+  .dot.claude-idle    { background: var(--accent); }
+  .dot.claude-working { background: var(--yellow, #d79921); animation: pulse 1.2s ease-in-out infinite; }
+  .dot.claude-waiting { background: var(--red); animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+  .meta .sub .state { text-transform: uppercase; letter-spacing: 0.05em; font-size: 10px; }
+  .state.claude-idle    { color: var(--accent); }
+  .state.claude-working { color: #d79921; }
+  .state.claude-waiting { color: var(--red); }
   .meta { flex: 1; min-width: 0; }
   .meta .title { font-weight: 500; color: var(--fg); display: block; word-wrap: break-word; }
   .meta .sub { color: var(--muted); font-size: 12px; margin-top: 2px; display: flex; gap: 8px; align-items: center; }

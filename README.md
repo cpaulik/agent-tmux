@@ -49,6 +49,32 @@ The **focus in terminal** button on each pane runs
 `tmux switch-client` for every attached client and brings the configured
 terminal app (`ISSUE_TRACKER_TERMINAL_APP`, default `Alacritty`) to the front.
 
+## Claude session status (sidebar dot)
+
+The sidebar dot reflects whether Claude is currently `idle` (blue),
+`working` (yellow, pulsing), or `waiting` for input (red, pulsing). State is
+fed by Claude Code hooks: `hooks/claude-status-hook.sh` reads the hook JSON,
+derives the surrounding tmux session, and POSTs `/api/claude-hook`. State is
+in-memory and per server run.
+
+Add this to `~/.claude/settings.json` (additive — coexists with any existing
+hook entries by appending alongside them):
+
+```json
+{
+  "hooks": {
+    "SessionStart":     [{"matcher": "", "hooks": [{"type": "command", "command": "/Users/christoph/workspace/claude-issue-tracker/hooks/claude-status-hook.sh", "timeout": 5}]}],
+    "UserPromptSubmit": [{"matcher": "", "hooks": [{"type": "command", "command": "/Users/christoph/workspace/claude-issue-tracker/hooks/claude-status-hook.sh", "timeout": 5}]}],
+    "Stop":             [{"matcher": "", "hooks": [{"type": "command", "command": "/Users/christoph/workspace/claude-issue-tracker/hooks/claude-status-hook.sh", "timeout": 5}]}],
+    "Notification":     [{"matcher": "", "hooks": [{"type": "command", "command": "/Users/christoph/workspace/claude-issue-tracker/hooks/claude-status-hook.sh", "timeout": 5}]}],
+    "SessionEnd":       [{"matcher": "", "hooks": [{"type": "command", "command": "/Users/christoph/workspace/claude-issue-tracker/hooks/claude-status-hook.sh", "timeout": 5}]}]
+  }
+}
+```
+
+The script bails out silently if `$TMUX` is unset or the server is down, so
+running Claude outside tmux costs nothing.
+
 ## External links
 
 The Chrome `--app` window keeps `target=_blank` clicks inside the app. A global
@@ -68,6 +94,7 @@ in `static/index.html` to switch.
 |-----|---------|-------|
 | `ISSUE_TRACKER_PROJECT_ID` | `11220` | GitLab project to query for issues |
 | `ISSUE_TRACKER_ASSIGNEE`   | `christoph` | `assignee_username` filter |
+| `ISSUE_TRACKER_GITLAB_HOST`| `code.earth.planet.com` | `GITLAB_HOST` passed to glab |
 | `ISSUE_TRACKER_PORT`       | `8765` | Dashboard listen port |
 | `ISSUE_TRACKER_FONT`       | `Hack Nerd Font Mono` | xterm.js `fontFamily` |
 | `ISSUE_TRACKER_FONT_SIZE`  | `13` | xterm.js `fontSize` |

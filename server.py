@@ -22,6 +22,10 @@ from urllib.parse import urlparse
 
 PROJECT_ID = os.environ.get("ISSUE_TRACKER_PROJECT_ID", "11220")
 ASSIGNEE = os.environ.get("ISSUE_TRACKER_ASSIGNEE", "christoph")
+# glab picks its API host from the current dir's git remote; running outside
+# a matching repo falls back to gitlab.com. Pin it explicitly so the server
+# works regardless of where it was launched from.
+GITLAB_HOST = os.environ.get("ISSUE_TRACKER_GITLAB_HOST", "code.earth.planet.com")
 SESSION_PREFIX = "claude-issue-"
 # Existing user sessions named like "<iid>-anything" are also recognized.
 ISSUE_SESSION_RE = re.compile(r"^(\d+)-")
@@ -49,6 +53,13 @@ STATIC_DIR = ROOT / "static"
 # issue_num (str) -> {"port": int, "pid": int}
 _sessions_lock = threading.Lock()
 _sessions: dict[str, dict] = {}
+
+# tmux session name -> {"state": "idle|working|waiting", "ts": float}.
+# Populated by hooks/claude-status-hook.sh via POST /api/claude-hook.
+_claude_lock = threading.Lock()
+_claude_state: dict[str, dict] = {}
+# Hooks may fire just after Claude exits; treat older entries as stale.
+CLAUDE_STATE_TTL = 12 * 60 * 60  # seconds
 
 
 def _find_free_port(start: int) -> int:
@@ -187,6 +198,28 @@ def _other_session_names() -> list[str]:
     return sorted(others)
 
 
+def _claude_rec_for(session_name: str | None) -> dict | None:
+    if not session_name:
+        return None
+    with _claude_lock:
+        rec = _claude_state.get(session_name)
+    if not rec:
+        return None
+    if time.time() - rec["ts"] > CLAUDE_STATE_TTL:
+        return None
+    return rec
+
+
+def _claude_state_for(session_name: str | None) -> str | None:
+    rec = _claude_rec_for(session_name)
+    return rec["state"] if rec else None
+
+
+def _claude_ts_for(session_name: str | None) -> float:
+    rec = _claude_rec_for(session_name)
+    return rec["ts"] if rec else 0.0
+
+
 def _ensure_ttyd(slot_id: str, session_name: str) -> int:
     with _sessions_lock:
         existing = _sessions.get(slot_id)
@@ -222,12 +255,16 @@ def _ensure_ttyd(slot_id: str, session_name: str) -> int:
 
 
 def _fetch_issues() -> list[dict]:
+    env = os.environ.copy()
+    if GITLAB_HOST:
+        env["GITLAB_HOST"] = GITLAB_HOST
     out = subprocess.check_output(
         [
             "glab", "api",
             f"/projects/{PROJECT_ID}/issues"
             f"?state=opened&assignee_username={ASSIGNEE}&per_page=50",
         ],
+        env=env,
     ).decode()
     return json.loads(out)
 
@@ -400,15 +437,28 @@ class Handler(BaseHTTPRequestHandler):
             result = []
             for i in issues:
                 num = str(i["iid"])
+                tmux_session = sessions_map.get(num)
                 result.append({
                     "iid": i["iid"],
                     "title": i["title"],
                     "web_url": i["web_url"],
                     "labels": i.get("labels", []),
-                    "tmux_session": sessions_map.get(num),
+                    "tmux_session": tmux_session,
                     "ttyd_port": ports.get(num),
+                    "claude_state": _claude_state_for(tmux_session),
+                    "claude_ts": _claude_ts_for(tmux_session),
                 })
+            # Sort: recent claude activity first; rest keep glab's order (stable).
+            result.sort(key=lambda r: -(r.get("claude_ts") or 0.0))
             self._send_json(200, result)
+            return
+        if path == "/api/claude-states":
+            with _claude_lock:
+                now = time.time()
+                out = {k: {"state": v["state"], "ts": v["ts"]}
+                       for k, v in _claude_state.items()
+                       if now - v["ts"] <= CLAUDE_STATE_TTL}
+            self._send_json(200, out)
             return
         if path == "/api/other-sessions":
             with _sessions_lock:
@@ -423,7 +473,10 @@ class Handler(BaseHTTPRequestHandler):
                     "slot_id": slot_id,
                     "openable": openable,
                     "ttyd_port": ports.get(slot_id) if slot_id else None,
+                    "claude_state": _claude_state_for(name),
+                    "claude_ts": _claude_ts_for(name),
                 })
+            result.sort(key=lambda r: -(r.get("claude_ts") or 0.0))
             self._send_json(200, result)
             return
         self.send_error(404)
@@ -432,6 +485,28 @@ class Handler(BaseHTTPRequestHandler):
         if self._try_proxy():
             return
         path = urlparse(self.path).path
+        if path == "/api/claude-hook":
+            cl = self.headers.get("Content-Length")
+            if not cl:
+                self._send_json(400, {"error": "missing body"})
+                return
+            try:
+                body = json.loads(self.rfile.read(int(cl)) or b"{}")
+            except (json.JSONDecodeError, ValueError):
+                self._send_json(400, {"error": "invalid json"})
+                return
+            session = str(body.get("session", "")).strip()
+            state = str(body.get("state", "")).strip()
+            if not session or state not in ("idle", "working", "waiting", "ended"):
+                self._send_json(400, {"error": "session/state required"})
+                return
+            with _claude_lock:
+                if state == "ended":
+                    _claude_state.pop(session, None)
+                else:
+                    _claude_state[session] = {"state": state, "ts": time.time()}
+            self._send_json(200, {"ok": True})
+            return
         if path == "/external":
             from urllib.parse import parse_qs
             qs = parse_qs(urlparse(self.path).query)
