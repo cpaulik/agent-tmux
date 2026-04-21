@@ -48,6 +48,9 @@
     text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted);
     border-top: 1px solid var(--border); margin-top: 8px;
   }
+  .section-header.first { border-top: 0; margin-top: 0; }
+  body.no-glab header h1,
+  body.no-glab ul#issues { display: none; }
   li.issue {
     padding: 10px 16px; border-bottom: 1px solid var(--border);
     cursor: pointer; display: flex; gap: 8px; align-items: flex-start;
@@ -102,7 +105,7 @@
     <button id="refresh">Refresh</button>
   </header>
   <ul id="issues"><li style="padding: 16px; color: var(--muted);">Loading…</li></ul>
-  <div class="section-header" id="other-header" style="display:none">Other tmux sessions</div>
+  <div class="section-header" id="other-header" style="display:none">Tmux sessions</div>
   <ul id="other-sessions"></ul>
 </aside>
 <div class="resizer" id="resizer" title="Drag to resize"></div>

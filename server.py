@@ -50,6 +50,8 @@ TTYD_THEME = {
 ROOT = Path(__file__).resolve().parent
 STATIC_DIR = ROOT / "static"
 
+_GLAB_AVAILABLE = False  # set in main() after PATH check
+
 # issue_num (str) -> {"port": int, "pid": int}
 _sessions_lock = threading.Lock()
 _sessions: dict[str, dict] = {}
@@ -235,6 +237,9 @@ def _ensure_ttyd(slot_id: str, session_name: str) -> int:
         port = _find_free_port(TTYD_BASE_PORT)
         # base-path makes ttyd serve under /ttyd/<slot_id>/ so we can proxy
         # it through this server (same origin → iframe works).
+        # `=` prefix on tmux target forces exact match (no prefix expansion),
+        # which matters for names like "tmux-plugin" that could otherwise be
+        # ambiguous or confused with partial matches.
         proc = subprocess.Popen(
             [
                 "ttyd", "-p", str(port), "-W",
@@ -242,15 +247,21 @@ def _ensure_ttyd(slot_id: str, session_name: str) -> int:
                 "-t", f"fontFamily={TTYD_FONT_FAMILY}",
                 "-t", f"fontSize={TTYD_FONT_SIZE}",
                 "-t", f"theme={json.dumps(TTYD_THEME)}",
-                "tmux", "attach", "-t", session_name,
+                "tmux", "attach", "-t", f"={session_name}",
             ],
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stderr=sys.stderr,
         )
         _sessions[slot_id] = {
             "port": port, "pid": proc.pid, "session": session_name,
         }
     _wait_port_ready(port)
+    if proc.poll() is not None:
+        print(
+            f"ttyd for session {session_name!r} exited immediately "
+            f"(code={proc.returncode}) — see stderr above",
+            file=sys.stderr,
+        )
     return port
 
 
@@ -424,7 +435,13 @@ class Handler(BaseHTTPRequestHandler):
         if path.startswith("/static/"):
             self._send_static(path[len("/static/"):])
             return
+        if path == "/api/config":
+            self._send_json(200, {"glab_available": _GLAB_AVAILABLE})
+            return
         if path == "/api/issues":
+            if not _GLAB_AVAILABLE:
+                self._send_json(200, [])
+                return
             try:
                 issues = _fetch_issues()
             except subprocess.CalledProcessError as e:
@@ -603,10 +620,16 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
-    for binary in ("tmux", "glab", "ttyd"):
+    global _GLAB_AVAILABLE
+    for binary in ("tmux", "ttyd"):
         if subprocess.run(["which", binary], stdout=subprocess.DEVNULL).returncode != 0:
             print(f"ERROR: '{binary}' not found in PATH", file=sys.stderr)
             sys.exit(1)
+    _GLAB_AVAILABLE = subprocess.run(
+        ["which", "glab"], stdout=subprocess.DEVNULL
+    ).returncode == 0
+    if not _GLAB_AVAILABLE:
+        print("warning: 'glab' not in PATH — GitLab issues disabled, tmux sessions only", file=sys.stderr)
     _cleanup_owned_ttyd()
     httpd = ThreadingHTTPServer(("127.0.0.1", LISTEN_PORT), Handler)
     print(f"issue-tracker: http://127.0.0.1:{LISTEN_PORT}")

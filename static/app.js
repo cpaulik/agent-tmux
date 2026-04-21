@@ -272,8 +272,21 @@ function reorderListByActivity(ul) {
 }
 
 refreshBtn.addEventListener("click", refreshAll);
+(async () => {
+  try {
+    const r = await fetch("/api/config");
+    if (r.ok) {
+      const cfg = await r.json();
+      if (!cfg.glab_available) {
+        document.body.classList.add("no-glab");
+        otherHeaderEl.classList.add("first");
+      }
+    }
+  } catch { /* ignore */ }
+})();
 refreshAll();
-setInterval(refreshAll, 30000);
+setInterval(loadIssues, 30000);          // glab → GitLab, rate-limited
+setInterval(loadOtherSessions, 4000);    // cheap tmux list-sessions
 setInterval(refreshClaudeStates, 2000);
 
 // Resizable sidebar (persisted in localStorage)
