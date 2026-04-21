@@ -84,12 +84,22 @@ stop_tail() {
 }
 
 open_browser() {
+  # Prefer the Nativefier-built wrapper (own Dock icon + name).
+  # Falls back to Chrome --app, then system default browser.
+  local app
+  for app in "${HOME}/Applications/Claude Issue Tracker.app" \
+             "/Applications/Claude Issue Tracker.app"; do
+    if [[ -d "${app}" ]]; then
+      open -na "${app}"
+      return
+    fi
+  done
   if [[ -d "/Applications/Google Chrome.app" ]]; then
     open -na "Google Chrome" --args "--app=${URL}" "--user-data-dir=${PROFILE_DIR}"
   elif [[ -d "/Applications/Brave Browser.app" ]]; then
     open -na "Brave Browser" --args "--app=${URL}" "--user-data-dir=${PROFILE_DIR}"
   else
-    echo "no Chromium browser found; opening default browser" >&2
+    echo "no native app or Chromium browser found; opening default browser" >&2
     open "${URL}"
   fi
 }
