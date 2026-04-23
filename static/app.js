@@ -3,7 +3,8 @@ const inactiveEl = document.getElementById("inactive-issues");
 const inactiveSectionEl = document.getElementById("inactive-section");
 const inactiveCountEl = document.getElementById("inactive-count");
 const otherEl = document.getElementById("other-sessions");
-const otherHeaderEl = document.getElementById("other-header");
+const otherSectionEl = document.getElementById("other-section");
+const otherCountEl = document.getElementById("other-count");
 const mainEl = document.getElementById("main");
 const placeholderEl = document.getElementById("placeholder");
 const refreshBtn = document.getElementById("refresh");
@@ -192,11 +193,13 @@ async function loadOtherSessions() {
 
 function renderOtherSessions(items) {
   if (!items.length) {
-    otherHeaderEl.style.display = "none";
+    otherSectionEl.style.display = "none";
+    otherCountEl.textContent = "";
     otherEl.innerHTML = "";
     return;
   }
-  otherHeaderEl.style.display = "";
+  otherSectionEl.style.display = "";
+  otherCountEl.textContent = `(${items.length})`;
   otherEl.innerHTML = "";
   for (const s of items) {
     const slotKey = `n-${s.name}`;
@@ -296,7 +299,6 @@ refreshBtn.addEventListener("click", refreshAll);
       const cfg = await r.json();
       if (!cfg.glab_available) {
         document.body.classList.add("no-glab");
-        otherHeaderEl.classList.add("first");
       }
     }
   } catch { /* ignore */ }

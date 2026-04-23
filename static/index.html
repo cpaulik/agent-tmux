@@ -13,7 +13,7 @@
   html, body { height: 100%; margin: 0; }
   body {
     background: var(--bg); color: var(--fg);
-    font: 14px/1.4 -apple-system, "SF Pro Text", system-ui, sans-serif;
+    font: 13px/1.4 -apple-system, "SF Pro Text", system-ui, sans-serif;
     display: grid;
     grid-template-columns: var(--sidebar-w, 380px) 4px 1fr;
     height: 100vh;
@@ -33,22 +33,25 @@
     display: flex; flex-direction: column;
   }
   header {
-    padding: 12px 16px; border-bottom: 1px solid var(--border);
+    padding: 10px 14px; border-bottom: 1px solid var(--border);
     display: flex; align-items: center; justify-content: space-between;
+    background: rgba(0,0,0,0.15);
   }
-  header h1 { margin: 0; font-size: 14px; font-weight: 600; }
+  header h1 { margin: 0; font-size: 13px; font-weight: 600; color: var(--fg); }
   header button {
     background: transparent; color: var(--muted); border: 1px solid var(--border);
-    padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px;
+    padding: 3px 7px; border-radius: 4px; cursor: pointer; font-size: 11px;
   }
   header button:hover { color: var(--fg); border-color: var(--accent); }
-  ul#issues, ul#other-sessions { list-style: none; padding: 0; margin: 0; }
+  ul#issues, ul#inactive-issues, ul#other-sessions { list-style: none; padding: 0; margin: 0; }
+  /* Section headers (foldout summaries + plain). Distinct bar with tinted bg. */
   .section-header {
-    padding: 10px 16px 6px; font-size: 11px; font-weight: 600;
-    text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted);
-    border-top: 1px solid var(--border); margin-top: 8px;
+    padding: 8px 14px; font-size: 11px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.08em; color: var(--fg);
+    background: rgba(0,0,0,0.18);
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
   }
-  .section-header.first { border-top: 0; margin-top: 0; }
   details.foldout > summary {
     list-style: none; cursor: pointer; user-select: none;
     display: flex; align-items: center; gap: 6px;
@@ -59,18 +62,19 @@
     transition: transform 0.1s;
   }
   details.foldout[open] > summary::before { transform: rotate(90deg); }
-  details.foldout > summary:hover { color: var(--fg); }
-  details.foldout .count { color: var(--muted); font-weight: 400; }
+  details.foldout > summary:hover { background: rgba(0,0,0,0.28); }
+  details.foldout > summary:hover::before { color: var(--fg); }
+  .section-header .count { color: var(--muted); font-weight: 500; margin-left: 2px; }
   body.no-glab header h1,
   body.no-glab ul#issues,
   body.no-glab #inactive-section { display: none !important; }
   li.issue {
-    padding: 10px 16px; border-bottom: 1px solid var(--border);
+    padding: 8px 14px; border-bottom: 1px solid var(--border);
     cursor: pointer; display: flex; gap: 8px; align-items: flex-start;
   }
   li.issue:hover { background: rgba(255,255,255,0.03); }
-  li.issue.active { background: rgba(79,140,255,0.1); border-left: 2px solid var(--accent); padding-left: 14px; }
-  .dot { flex: 0 0 8px; height: 8px; width: 8px; border-radius: 50%; margin-top: 6px; background: var(--muted); }
+  li.issue.active { background: rgba(79,140,255,0.1); border-left: 2px solid var(--accent); padding-left: 12px; }
+  .dot { flex: 0 0 8px; height: 8px; width: 8px; border-radius: 50%; margin-top: 5px; background: var(--muted); }
   .dot.alive { background: var(--green); }
   /* Claude session states (overrides .alive when present). */
   .dot.claude-idle    { background: var(--accent); }
@@ -83,7 +87,7 @@
   .state.claude-waiting { color: var(--red); }
   .meta { flex: 1; min-width: 0; }
   .meta .title { font-weight: 500; color: var(--fg); display: block; word-wrap: break-word; }
-  .meta .sub { color: var(--muted); font-size: 12px; margin-top: 2px; display: flex; gap: 8px; align-items: center; }
+  .meta .sub { color: var(--muted); font-size: 11px; margin-top: 2px; display: flex; gap: 8px; align-items: center; }
   .meta .sub a { color: var(--muted); text-decoration: none; }
   .meta .sub a:hover { color: var(--accent); }
   .meta .iid { color: var(--muted); font-weight: 400; text-decoration: none; margin-right: 4px; }
@@ -122,8 +126,10 @@
     <summary class="section-header">Other <span class="count" id="inactive-count"></span></summary>
     <ul id="inactive-issues"></ul>
   </details>
-  <div class="section-header" id="other-header" style="display:none">Tmux sessions</div>
-  <ul id="other-sessions"></ul>
+  <details class="foldout" id="other-section" open style="display:none">
+    <summary class="section-header">Tmux sessions <span class="count" id="other-count"></span></summary>
+    <ul id="other-sessions"></ul>
+  </details>
 </aside>
 <div class="resizer" id="resizer" title="Drag to resize"></div>
 <main id="main">
