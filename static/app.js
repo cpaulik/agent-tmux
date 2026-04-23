@@ -47,12 +47,36 @@ function renderIssues(issues) {
   } else {
     issuesEl.innerHTML = "";
     for (const i of activeIssues) issuesEl.appendChild(makeIssueLi(i));
+    for (const i of activeIssues) loadMRs(i.iid);
   }
 
   inactiveEl.innerHTML = "";
   for (const i of inactiveIssues) inactiveEl.appendChild(makeIssueLi(i));
+  for (const i of inactiveIssues) if (i.iid in _mrCache) _renderMRs(i.iid);
   inactiveSectionEl.style.display = inactiveIssues.length ? "" : "none";
   inactiveCountEl.textContent = inactiveIssues.length ? `(${inactiveIssues.length})` : "";
+}
+
+const _mrCache = {};
+
+function _renderMRs(iid) {
+  const el = document.querySelector(`[data-mr-iid="${iid}"]`);
+  if (!el) return;
+  const mrs = _mrCache[iid];
+  if (!mrs || !mrs.length) { el.style.display = "none"; return; }
+  el.innerHTML = mrs.map(mr =>
+    `<a href="${mr.web_url}" class="mr-link mr-${mr.state}" target="_blank" rel="noreferrer" title="${escapeHtml(mr.title)}">!${mr.iid}</a>`
+  ).join(" ");
+}
+
+async function loadMRs(iid) {
+  if (iid in _mrCache) { _renderMRs(iid); return; }
+  try {
+    const res = await fetch(`/api/issues/${iid}/merge-requests`);
+    if (!res.ok) return;
+    _mrCache[iid] = await res.json();
+    _renderMRs(iid);
+  } catch {}
 }
 
 function makeIssueLi(i) {
@@ -76,12 +100,14 @@ function makeIssueLi(i) {
         ${escapeHtml(i.title)}
       </span>
       ${sub}
+      <div class="sub mr-row" data-mr-iid="${i.iid}"></div>
     </div>`;
   li.dataset.slot = slotKey;
   if (i.tmux_session) li.dataset.session = i.tmux_session;
   li.dataset.claudeTs = String(i.claude_ts || 0);
   li.addEventListener("click", (ev) => {
-    if (ev.target.closest("a")) return;  // let link clicks fall through
+    if (ev.target.closest("a")) return;
+    loadMRs(i.iid);
     openIssue(i);
   });
   return li;

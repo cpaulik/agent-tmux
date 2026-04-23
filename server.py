@@ -114,7 +114,9 @@ def _sessions_by_issue() -> dict[str, str]:
     result: dict[str, str] = {}
     for name in _list_tmux_session_names():
         if name.startswith(SESSION_PREFIX):
-            result.setdefault(name[len(SESSION_PREFIX):], name)
+            suffix = name[len(SESSION_PREFIX):]
+            if suffix.isdigit():
+                result.setdefault(suffix, name)
             continue
         m = ISSUE_SESSION_RE.match(name)
         if m:
@@ -200,14 +202,8 @@ def _focus_session_in_terminal(session_name: str) -> int:
 def _other_session_names() -> list[str]:
     """tmux sessions that aren't bound to any issue."""
     issue_session_names = set(_sessions_by_issue().values())
-    others = []
-    for name in _list_tmux_session_names():
-        if name in issue_session_names:
-            continue
-        if name.startswith(SESSION_PREFIX):
-            continue
-        others.append(name)
-    return sorted(others)
+    return sorted(name for name in _list_tmux_session_names()
+                  if name not in issue_session_names)
 
 
 def _claude_rec_for(session_name: str | None) -> dict | None:
@@ -296,6 +292,30 @@ def _fetch_issues() -> list[dict]:
         env=env,
     ).decode()
     return json.loads(out)
+
+
+def _fetch_related_mrs(issue_iid: int) -> list[dict]:
+    env = os.environ.copy()
+    if GITLAB_HOST:
+        env["GITLAB_HOST"] = GITLAB_HOST
+    try:
+        out = subprocess.check_output(
+            [
+                "glab", "api",
+                f"/projects/{PROJECT_ID}/issues/{issue_iid}"
+                f"/related_merge_requests",
+            ],
+            env=env,
+            timeout=10,
+        ).decode()
+        mrs = json.loads(out)
+        return [
+            {"iid": mr["iid"], "title": mr["title"],
+             "web_url": mr["web_url"], "state": mr["state"]}
+            for mr in mrs
+        ]
+    except Exception:
+        return []
 
 
 def _cleanup_owned_ttyd() -> None:
@@ -474,17 +494,19 @@ class Handler(BaseHTTPRequestHandler):
                 num = str(i["iid"])
                 tmux_session = sessions_map.get(num)
                 labels = i.get("labels", [])
-                result.append({
+                active = _is_active(labels)
+                entry = {
                     "iid": i["iid"],
                     "title": i["title"],
                     "web_url": i["web_url"],
                     "labels": labels,
-                    "active": _is_active(labels),
+                    "active": active,
                     "tmux_session": tmux_session,
                     "ttyd_port": ports.get(num),
                     "claude_state": _claude_state_for(tmux_session),
                     "claude_ts": _claude_ts_for(tmux_session),
-                })
+                }
+                result.append(entry)
             # Sort: recent claude activity first; rest keep glab's order (stable).
             result.sort(key=lambda r: -(r.get("claude_ts") or 0.0))
             self._send_json(200, result)
@@ -496,6 +518,11 @@ class Handler(BaseHTTPRequestHandler):
                        for k, v in _claude_state.items()
                        if now - v["ts"] <= CLAUDE_STATE_TTL}
             self._send_json(200, out)
+            return
+        mr_match = re.match(r"^/api/issues/(\d+)/merge-requests$", path)
+        if mr_match:
+            iid = int(mr_match.group(1))
+            self._send_json(200, _fetch_related_mrs(iid))
             return
         if path == "/api/other-sessions":
             with _sessions_lock:
