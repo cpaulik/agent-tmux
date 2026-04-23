@@ -16,23 +16,25 @@
 
 "use strict";
 
-// Bumped to v2 to drop old cached configs that bound showHelp to bare "?".
-const STORAGE_KEY = "issue-tracker:keybindings:v2";
+// Bumped to v3 when adding the session switcher binding.
+const STORAGE_KEY = "issue-tracker:keybindings:v3";
 
 const DEFAULT_CONFIG = {
   leader: null,                 // e.g. "space" — null disables leader.
   leaderTimeoutMs: 1200,
   bindings: {
-    nextSession: "alt+j",
-    prevSession: "alt+k",
-    showHelp:    "alt+h",
+    nextSession:   "alt+j",
+    prevSession:   "alt+k",
+    switchSession: "meta+o",
+    showHelp:      "alt+h",
   },
 };
 
 const COMMAND_LABELS = {
-  nextSession: "Next tmux session",
-  prevSession: "Previous tmux session",
-  showHelp:    "Show keybindings help",
+  nextSession:   "Next tmux session",
+  prevSession:   "Previous tmux session",
+  switchSession: "Switch session (fuzzy picker)",
+  showHelp:      "Show keybindings help",
 };
 
 const STATE = {
@@ -176,9 +178,119 @@ function showHelp() {
   document.body.appendChild(el);
 }
 
+// Collect all sidebar items as candidate sessions for the switcher.
+function getAllSessions() {
+  return Array.from(document.querySelectorAll(
+    "#issues li.issue, #other-sessions li.issue"
+  )).map(el => {
+    const titleEl = el.querySelector(".meta .title");
+    const iidEl   = el.querySelector(".meta .iid");
+    const subEl   = el.querySelector(".meta .sub");
+    const title = (titleEl?.textContent || "").trim();
+    const iid   = (iidEl?.textContent   || "").trim();
+    const sub   = (subEl?.textContent   || "").trim().replace(/\s+/g, " ");
+    const label = iid ? `${iid} ${title}` : title;
+    const openable = !(el.style.opacity && parseFloat(el.style.opacity) < 1);
+    return { el, label, sub, openable };
+  });
+}
+
+// Tiny fuzzy match: returns a score (lower = better) or -1 for no match.
+// All chars of `q` must appear in order in `label` (case-insensitive). Score
+// favours tighter matches.
+function fuzzyScore(label, q) {
+  if (!q) return 0;
+  label = label.toLowerCase();
+  q = q.toLowerCase();
+  let li = 0, qi = 0, score = 0, lastIdx = -1;
+  while (li < label.length && qi < q.length) {
+    if (label[li] === q[qi]) {
+      if (lastIdx >= 0) score += (li - lastIdx);
+      lastIdx = li;
+      qi++;
+    }
+    li++;
+  }
+  return qi === q.length ? score : -1;
+}
+
+function showSwitcher() {
+  const existing = document.getElementById("session-switcher");
+  if (existing) { existing.remove(); return; }
+
+  const sessions = getAllSessions();
+  if (sessions.length === 0) return;
+  let selectedIdx = 0;
+  let filtered = sessions.map(s => ({ s, score: 0 }));
+
+  const overlay = document.createElement("div");
+  overlay.id = "session-switcher";
+  overlay.innerHTML = `
+    <div class="ss-inner" role="dialog" aria-label="Switch session">
+      <input type="text" id="ss-input" placeholder="Type to filter sessions…" autocomplete="off" spellcheck="false">
+      <ul id="ss-list"></ul>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  const input = overlay.querySelector("#ss-input");
+  const list  = overlay.querySelector("#ss-list");
+
+  function render() {
+    const q = input.value.trim();
+    filtered = sessions
+      .map(s => ({ s, score: fuzzyScore(s.label, q) }))
+      .filter(x => x.score >= 0)
+      .sort((a, b) => a.score - b.score);
+    if (selectedIdx >= filtered.length) selectedIdx = Math.max(0, filtered.length - 1);
+    list.innerHTML = filtered.map(({ s }, i) => `
+      <li class="ss-item${i === selectedIdx ? " selected" : ""}${s.openable ? "" : " disabled"}" data-idx="${i}">
+        <div class="ss-title">${escapeHtml(s.label)}</div>
+        ${s.sub ? `<div class="ss-sub">${escapeHtml(s.sub)}</div>` : ""}
+      </li>
+    `).join("");
+    const sel = list.querySelector(".ss-item.selected");
+    sel?.scrollIntoView({ block: "nearest" });
+  }
+
+  function pick(idx) {
+    const target = filtered[idx]?.s;
+    if (!target || !target.openable) return;
+    overlay.remove();
+    target.el.click();
+    target.el.scrollIntoView({ block: "nearest" });
+  }
+
+  input.addEventListener("input", () => { selectedIdx = 0; render(); });
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Escape")    { e.preventDefault(); overlay.remove(); return; }
+    if (e.key === "ArrowDown") { e.preventDefault(); selectedIdx = Math.min(filtered.length - 1, selectedIdx + 1); render(); return; }
+    if (e.key === "ArrowUp")   { e.preventDefault(); selectedIdx = Math.max(0, selectedIdx - 1); render(); return; }
+    if (e.key === "Enter")     { e.preventDefault(); pick(selectedIdx); return; }
+    // Cmd/Ctrl+J/K vim-style nav — handy when you don't want to leave Home row.
+    if ((e.ctrlKey || e.metaKey) && (e.key === "j" || e.key === "n")) {
+      e.preventDefault(); selectedIdx = Math.min(filtered.length - 1, selectedIdx + 1); render(); return;
+    }
+    if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "p")) {
+      e.preventDefault(); selectedIdx = Math.max(0, selectedIdx - 1); render(); return;
+    }
+  });
+
+  list.addEventListener("click", (e) => {
+    const li = e.target.closest("li.ss-item");
+    if (!li) return;
+    pick(parseInt(li.dataset.idx, 10));
+  });
+  overlay.addEventListener("mousedown", (e) => { if (e.target === overlay) overlay.remove(); });
+
+  render();
+  requestAnimationFrame(() => input.focus());
+}
+
 const COMMANDS = {
-  nextSession: () => moveSession(+1),
-  prevSession: () => moveSession(-1),
+  nextSession:   () => moveSession(+1),
+  prevSession:   () => moveSession(-1),
+  switchSession: showSwitcher,
   showHelp,
 };
 
@@ -199,9 +311,11 @@ function onKeydown(e) {
     if (help) { e.preventDefault(); e.stopPropagation(); help.remove(); return; }
   }
 
-  // While the help overlay is open, swallow every key so it doesn't leak
-  // through to the terminal iframe underneath.
-  if (document.getElementById("keybindings-help")) {
+  // While an overlay is open, swallow every key so it doesn't leak through
+  // to the terminal iframe underneath. The overlay's own input handles its
+  // own keys (Esc/Enter/etc.) before this fires.
+  if (document.getElementById("keybindings-help") ||
+      document.getElementById("session-switcher")) {
     e.preventDefault();
     e.stopPropagation();
     return;
