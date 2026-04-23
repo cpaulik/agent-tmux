@@ -47,7 +47,7 @@ function renderIssues(issues) {
   } else {
     issuesEl.innerHTML = "";
     for (const i of activeIssues) issuesEl.appendChild(makeIssueLi(i));
-    for (const i of activeIssues) loadMRs(i.iid);
+    for (const i of activeIssues) loadMRs(i.iid, true);
   }
 
   inactiveEl.innerHTML = "";
@@ -69,8 +69,8 @@ function _renderMRs(iid) {
   ).join(" ");
 }
 
-async function loadMRs(iid) {
-  if (iid in _mrCache) { _renderMRs(iid); return; }
+async function loadMRs(iid, forceRefresh) {
+  if (!forceRefresh && iid in _mrCache) { _renderMRs(iid); return; }
   try {
     const res = await fetch(`/api/issues/${iid}/merge-requests`);
     if (!res.ok) return;
