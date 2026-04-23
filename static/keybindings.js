@@ -16,17 +16,17 @@
 
 "use strict";
 
-// Bumped to v3 when adding the session switcher binding.
-const STORAGE_KEY = "issue-tracker:keybindings:v3";
+// Bumped to v4 when switching alt-based bindings to meta.
+const STORAGE_KEY = "issue-tracker:keybindings:v4";
 
 const DEFAULT_CONFIG = {
   leader: null,                 // e.g. "space" — null disables leader.
   leaderTimeoutMs: 1200,
   bindings: {
-    nextSession:   "alt+j",
-    prevSession:   "alt+k",
+    nextSession:   "meta+j",
+    prevSession:   "meta+k",
     switchSession: "meta+o",
-    showHelp:      "alt+h",
+    showHelp:      "meta+h",
   },
 };
 
