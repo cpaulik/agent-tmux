@@ -49,8 +49,21 @@
     border-top: 1px solid var(--border); margin-top: 8px;
   }
   .section-header.first { border-top: 0; margin-top: 0; }
+  details.foldout > summary {
+    list-style: none; cursor: pointer; user-select: none;
+    display: flex; align-items: center; gap: 6px;
+  }
+  details.foldout > summary::-webkit-details-marker { display: none; }
+  details.foldout > summary::before {
+    content: "▸"; font-size: 9px; color: var(--muted);
+    transition: transform 0.1s;
+  }
+  details.foldout[open] > summary::before { transform: rotate(90deg); }
+  details.foldout > summary:hover { color: var(--fg); }
+  details.foldout .count { color: var(--muted); font-weight: 400; }
   body.no-glab header h1,
-  body.no-glab ul#issues { display: none; }
+  body.no-glab ul#issues,
+  body.no-glab #inactive-section { display: none !important; }
   li.issue {
     padding: 10px 16px; border-bottom: 1px solid var(--border);
     cursor: pointer; display: flex; gap: 8px; align-items: flex-start;
@@ -105,6 +118,10 @@
     <button id="refresh">Refresh</button>
   </header>
   <ul id="issues"><li style="padding: 16px; color: var(--muted);">Loading…</li></ul>
+  <details class="foldout" id="inactive-section" style="display:none">
+    <summary class="section-header">Other <span class="count" id="inactive-count"></span></summary>
+    <ul id="inactive-issues"></ul>
+  </details>
   <div class="section-header" id="other-header" style="display:none">Tmux sessions</div>
   <ul id="other-sessions"></ul>
 </aside>

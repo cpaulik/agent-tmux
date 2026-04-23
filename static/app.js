@@ -1,4 +1,7 @@
 const issuesEl = document.getElementById("issues");
+const inactiveEl = document.getElementById("inactive-issues");
+const inactiveSectionEl = document.getElementById("inactive-section");
+const inactiveCountEl = document.getElementById("inactive-count");
 const otherEl = document.getElementById("other-sessions");
 const otherHeaderEl = document.getElementById("other-header");
 const mainEl = document.getElementById("main");
@@ -32,42 +35,55 @@ async function loadIssues() {
 }
 
 function renderIssues(issues) {
-  if (!issues.length) {
-    issuesEl.innerHTML = '<li style="padding:16px;color:var(--muted)">No open issues assigned to you.</li>';
-    return;
+  const activeIssues = issues.filter(i => i.active);
+  const inactiveIssues = issues.filter(i => !i.active);
+
+  if (!activeIssues.length) {
+    const msg = issues.length
+      ? "No issues in progress — check 'Other' below."
+      : "No open issues assigned to you.";
+    issuesEl.innerHTML = `<li style="padding:16px;color:var(--muted)">${msg}</li>`;
+  } else {
+    issuesEl.innerHTML = "";
+    for (const i of activeIssues) issuesEl.appendChild(makeIssueLi(i));
   }
-  issuesEl.innerHTML = "";
-  for (const i of issues) {
-    const slotKey = ISSUE_SLOT(i.iid);
-    const li = document.createElement("li");
-    li.className = "issue";
-    if (activeSlot === slotKey) li.classList.add("active");
-    const alive = i.tmux_session || i.ttyd_port;
-    const stateBadge = i.claude_state
-      ? ` <span class="state claude-${i.claude_state}" title="claude: ${i.claude_state}">${i.claude_state}</span>` : "";
-    const sub = i.tmux_session
-      ? `<div class="sub"><span title="tmux session">⎇ ${escapeHtml(i.tmux_session)}</span>${stateBadge}</div>`
-      : "";
-    const dotClass = i.claude_state
-      ? `claude-${i.claude_state}` : (alive ? "alive" : "");
-    li.innerHTML = `
-      <span class="dot ${dotClass}"></span>
-      <div class="meta">
-        <span class="title">
-          <a href="${i.web_url}" class="iid" target="_blank" rel="noreferrer">#${i.iid}</a>
-          ${escapeHtml(i.title)}
-        </span>
-        ${sub}
-      </div>`;
-    li.dataset.slot = slotKey;
-    if (i.tmux_session) li.dataset.session = i.tmux_session;
-    li.dataset.claudeTs = String(i.claude_ts || 0);
-    li.addEventListener("click", (ev) => {
-      if (ev.target.closest("a")) return;  // let link clicks fall through
-      openIssue(i);
-    });
-    issuesEl.appendChild(li);
-  }
+
+  inactiveEl.innerHTML = "";
+  for (const i of inactiveIssues) inactiveEl.appendChild(makeIssueLi(i));
+  inactiveSectionEl.style.display = inactiveIssues.length ? "" : "none";
+  inactiveCountEl.textContent = inactiveIssues.length ? `(${inactiveIssues.length})` : "";
+}
+
+function makeIssueLi(i) {
+  const slotKey = ISSUE_SLOT(i.iid);
+  const li = document.createElement("li");
+  li.className = "issue";
+  if (activeSlot === slotKey) li.classList.add("active");
+  const alive = i.tmux_session || i.ttyd_port;
+  const stateBadge = i.claude_state
+    ? ` <span class="state claude-${i.claude_state}" title="claude: ${i.claude_state}">${i.claude_state}</span>` : "";
+  const sub = i.tmux_session
+    ? `<div class="sub"><span title="tmux session">⎇ ${escapeHtml(i.tmux_session)}</span>${stateBadge}</div>`
+    : "";
+  const dotClass = i.claude_state
+    ? `claude-${i.claude_state}` : (alive ? "alive" : "");
+  li.innerHTML = `
+    <span class="dot ${dotClass}"></span>
+    <div class="meta">
+      <span class="title">
+        <a href="${i.web_url}" class="iid" target="_blank" rel="noreferrer">#${i.iid}</a>
+        ${escapeHtml(i.title)}
+      </span>
+      ${sub}
+    </div>`;
+  li.dataset.slot = slotKey;
+  if (i.tmux_session) li.dataset.session = i.tmux_session;
+  li.dataset.claudeTs = String(i.claude_ts || 0);
+  li.addEventListener("click", (ev) => {
+    if (ev.target.closest("a")) return;  // let link clicks fall through
+    openIssue(i);
+  });
+  return li;
 }
 
 function showPane(slotKey) {
@@ -253,6 +269,7 @@ async function refreshClaudeStates() {
       }
     });
     reorderListByActivity(issuesEl);
+    reorderListByActivity(inactiveEl);
     reorderListByActivity(otherEl);
   } catch { /* ignore */ }
 }

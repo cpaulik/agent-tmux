@@ -33,6 +33,16 @@ TTYD_BASE_PORT = 7681
 LISTEN_PORT = int(os.environ.get("ISSUE_TRACKER_PORT", "8765"))
 TTYD_FONT_FAMILY = os.environ.get("ISSUE_TRACKER_FONT", "Hack Nerd Font Mono")
 TTYD_FONT_SIZE = os.environ.get("ISSUE_TRACKER_FONT_SIZE", "13")
+# Comma-separated label substrings (case-insensitive); an issue is shown in the
+# main list only if any of its labels matches one of these. Everything else
+# (other statuses, no status) goes behind a foldout in the sidebar.
+ACTIVE_LABEL_PATTERNS = [
+    s.strip().lower()
+    for s in os.environ.get(
+        "ISSUE_TRACKER_ACTIVE_LABELS", "status::in progress"
+    ).split(",")
+    if s.strip()
+]
 # Gruvbox dark palette (matches user's Alacritty config).
 TTYD_THEME = {
     "background": "#282828", "foreground": "#ebdbb2",
@@ -265,6 +275,14 @@ def _ensure_ttyd(slot_id: str, session_name: str) -> int:
     return port
 
 
+def _is_active(labels: list[str]) -> bool:
+    for label in labels:
+        ll = str(label).lower()
+        if any(pat in ll for pat in ACTIVE_LABEL_PATTERNS):
+            return True
+    return False
+
+
 def _fetch_issues() -> list[dict]:
     env = os.environ.copy()
     if GITLAB_HOST:
@@ -455,11 +473,13 @@ class Handler(BaseHTTPRequestHandler):
             for i in issues:
                 num = str(i["iid"])
                 tmux_session = sessions_map.get(num)
+                labels = i.get("labels", [])
                 result.append({
                     "iid": i["iid"],
                     "title": i["title"],
                     "web_url": i["web_url"],
-                    "labels": i.get("labels", []),
+                    "labels": labels,
+                    "active": _is_active(labels),
                     "tmux_session": tmux_session,
                     "ttyd_port": ports.get(num),
                     "claude_state": _claude_state_for(tmux_session),
