@@ -122,6 +122,13 @@ function showPane(slotKey) {
   document.querySelectorAll("li.issue, li.other").forEach(el => {
     el.classList.toggle("active", el.dataset.slot === slotKey);
   });
+  const active = panes.get(slotKey);
+  if (active) {
+    // Focus the iframe so keystrokes go straight to xterm.js without a
+    // separate click. Needs to run after the element is display-visible.
+    const iframe = active.querySelector("iframe");
+    if (iframe) requestAnimationFrame(() => iframe.focus());
+  }
 }
 
 async function openSlot(cfg) {

@@ -110,7 +110,7 @@ print_menu() {
 ── issue-tracker supervisor ───────────────────────────────
   r = restart server    l = show last 40 log lines
   o = re-open browser   q = quit (stops server)
-  (tailing ${LOG})
+  Enter = reprint this menu        (tailing ${LOG})
 EOF
 }
 
@@ -156,7 +156,7 @@ while true; do
     $'\x03')  # Ctrl-C (most TTYs deliver as SIGINT, but handle raw too)
       cleanup
       ;;
-    "?"|h|H)
+    "")        # Enter — reprint the menu (no printable-char collision)
       print_menu
       ;;
   esac

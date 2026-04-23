@@ -124,13 +124,51 @@
   .toolbar button:hover:not(:disabled) { border-color: var(--accent); }
   .toolbar button:disabled { color: var(--muted); cursor: default; }
   .err { color: var(--red); padding: 16px; }
+  .hdr-actions { display: flex; gap: 6px; }
+  #keys-help { min-width: 26px; padding: 4px 8px; font-weight: 600; }
+  #keybindings-help {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.55);
+    display: flex; align-items: center; justify-content: center; z-index: 100;
+  }
+  .kb-help-inner {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 8px; padding: 20px 24px;
+    min-width: 360px; max-width: 540px; color: var(--fg); font-size: 13px;
+  }
+  .kb-help-inner h2 {
+    margin: 0 0 12px 0; font-size: 14px; color: var(--accent); font-weight: 600;
+  }
+  .kb-help-inner .kb-rows { margin: 4px 0 12px 0; }
+  .kb-help-inner .kb-row {
+    display: grid; grid-template-columns: 180px 1fr; gap: 12px;
+    padding: 4px 0; align-items: baseline;
+  }
+  .kb-help-inner kbd {
+    font-family: "Hack Nerd Font Mono", ui-monospace, monospace; font-size: 12px;
+    color: var(--fg); background: var(--bg); border: 1px solid var(--border);
+    padding: 2px 6px; border-radius: 3px; justify-self: start;
+  }
+  .kb-help-inner .kb-sep { color: var(--muted); font-family: inherit; font-size: 11px; }
+  .kb-help-inner span { color: var(--muted); }
+  .kb-help-inner p {
+    color: var(--muted); font-size: 11px; margin: 10px 0 0 0; line-height: 1.55;
+  }
+  .kb-help-inner code {
+    background: var(--bg); border: 1px solid var(--border);
+    padding: 1px 5px; border-radius: 3px; font-size: 11px;
+    color: var(--fg); font-family: "Hack Nerd Font Mono", ui-monospace, monospace;
+  }
+  .kb-help-inner em { font-style: italic; color: var(--muted); }
 </style>
 </head>
 <body>
 <aside>
   <header>
     <h1>Issues</h1>
-    <button id="refresh">Refresh</button>
+    <div class="hdr-actions">
+      <button id="keys-help" title="Keybindings (?)">?</button>
+      <button id="refresh">Refresh</button>
+    </div>
   </header>
   <ul id="issues"><li style="padding: 16px; color: var(--muted);">Loading…</li></ul>
   <details class="foldout" id="inactive-section" style="display:none">
@@ -147,5 +185,6 @@
   <div class="placeholder" id="placeholder">Select an issue to open its Claude session</div>
 </main>
 <script src="/static/app.js"></script>
+<script src="/static/keybindings.js"></script>
 </body>
 </html>
