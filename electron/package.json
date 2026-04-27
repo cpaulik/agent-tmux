@@ -1,0 +1,8 @@
+{
+  "name": "claude-issue-tracker",
+  "version": "1.0.0",
+  "main": "main.js",
+  "devDependencies": {
+    "electron": "^31.0.0"
+  }
+}

@@ -1,0 +1,4 @@
+__pycache__/
+.build/
+electron/node_modules/
+electron/config.json

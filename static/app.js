@@ -385,3 +385,27 @@ document.addEventListener("click", (e) => {
     body: "url=" + encodeURIComponent(href),
   });
 });
+
+// Cmd+Shift+R / Ctrl+Shift+R: restart server then reload page
+document.addEventListener("keydown", (e) => {
+  if (e.key === "R" && e.shiftKey && (e.metaKey || e.ctrlKey)) {
+    e.preventDefault();
+    restartServer();
+  }
+});
+
+async function restartServer() {
+  placeholderEl.textContent = "Restarting server…";
+  placeholderEl.style.display = "";
+  try {
+    await fetch("/api/restart", { method: "POST" });
+  } catch {}
+  for (let i = 0; i < 50; i++) {
+    await new Promise(r => setTimeout(r, 200));
+    try {
+      const res = await fetch("/api/config");
+      if (res.ok) { location.reload(); return; }
+    } catch {}
+  }
+  placeholderEl.textContent = "Server did not come back — check the terminal.";
+}

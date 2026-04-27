@@ -341,6 +341,12 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):  # quieter logs
         sys.stderr.write(f"{self.address_string()} - {fmt % args}\n")
 
+    @staticmethod
+    def _do_restart():
+        time.sleep(0.3)
+        _cleanup_owned_ttyd()
+        os.execv(sys.executable, [sys.executable] + sys.argv)
+
     def _try_proxy(self) -> bool:
         m = PROXY_PATH_RE.match(urlparse(self.path).path)
         if not m:
@@ -549,6 +555,10 @@ class Handler(BaseHTTPRequestHandler):
         if self._try_proxy():
             return
         path = urlparse(self.path).path
+        if path == "/api/restart":
+            self._send_json(200, {"ok": True})
+            threading.Thread(target=self._do_restart, daemon=True).start()
+            return
         if path == "/api/claude-hook":
             cl = self.headers.get("Content-Length")
             if not cl:
