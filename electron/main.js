@@ -100,6 +100,43 @@ async function startServer() {
   return false;
 }
 
+async function restartServerAndReload() {
+  if (!mainWindow) return;
+  elog('restartServerAndReload: begin');
+  try {
+    await mainWindow.webContents.executeJavaScript(
+      `(() => { const p = document.getElementById("placeholder");
+                if (p) { p.textContent = "Restarting server…"; p.style.display = ""; } })()`
+    );
+  } catch {}
+  if (serverProcess && !serverProcess.killed) {
+    const proc = serverProcess;
+    await new Promise((resolve) => {
+      let done = false;
+      const finish = () => { if (!done) { done = true; resolve(); } };
+      const hardKill = setTimeout(() => {
+        try { proc.kill('SIGKILL'); } catch {}
+        finish();
+      }, 1500);
+      proc.once('exit', () => { clearTimeout(hardKill); finish(); });
+      try { proc.kill('SIGTERM'); } catch { clearTimeout(hardKill); finish(); }
+    });
+    serverProcess = null;
+  }
+  const ok = await startServer();
+  elog(`restartServerAndReload: startServer=${ok}`);
+  if (ok && mainWindow) {
+    mainWindow.webContents.reload();
+  } else if (mainWindow) {
+    try {
+      await mainWindow.webContents.executeJavaScript(
+        `(() => { const p = document.getElementById("placeholder");
+                  if (p) p.textContent = "Server did not come back — see ~/issue-tracker.log"; })()`
+      );
+    } catch {}
+  }
+}
+
 function saveWindowState() {
   if (!mainWindow) return;
   const stateFile = path.join(app.getPath('userData'), 'window-state.json');
@@ -142,12 +179,7 @@ function createMenu() {
         {
           label: 'Restart Server & Reload',
           accelerator: 'CmdOrCtrl+Shift+R',
-          click: () => {
-            if (!mainWindow) return;
-            mainWindow.webContents.executeJavaScript(
-              'typeof restartServer === "function" && restartServer()'
-            );
-          },
+          click: () => { restartServerAndReload(); },
         },
         { type: 'separator' },
         { role: 'toggleDevTools' },
