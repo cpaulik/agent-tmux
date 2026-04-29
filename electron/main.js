@@ -136,12 +136,25 @@ function createWindow() {
   mainWindow.on('close', saveWindowState);
   mainWindow.on('closed', () => { mainWindow = null; });
 
+  const isLocal = (u) => u.startsWith(`http://127.0.0.1:${PORT}`);
+
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (!url.startsWith(`http://127.0.0.1:${PORT}`)) {
+    if (!isLocal(url)) {
       shell.openExternal(url);
       return { action: 'deny' };
     }
     return { action: 'allow' };
+  });
+
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (!isLocal(url)) { event.preventDefault(); shell.openExternal(url); }
+  });
+
+  mainWindow.webContents.on('will-frame-navigate', (details) => {
+    if (!details.isMainFrame && !isLocal(details.url)) {
+      details.preventDefault();
+      shell.openExternal(details.url);
+    }
   });
 
   mainWindow.loadURL(URL);
@@ -157,8 +170,7 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
-  if (serverProcess && !serverProcess.killed) serverProcess.kill();
-  if (process.platform !== 'darwin') app.quit();
+  app.quit();
 });
 
 app.on('will-quit', () => {
