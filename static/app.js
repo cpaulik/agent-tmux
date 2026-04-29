@@ -179,6 +179,18 @@ async function openSlot(cfg) {
         setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000);
       }
     });
+    const iframe = pane.querySelector("iframe");
+    iframe.addEventListener("load", () => {
+      try {
+        iframe.contentWindow.open = function(openUrl) {
+          fetch("/external", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: "url=" + encodeURIComponent(openUrl),
+          });
+        };
+      } catch {}
+    });
     mainEl.appendChild(pane);
     panes.set(cfg.slotKey, pane);
     showPane(cfg.slotKey);

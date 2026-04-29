@@ -13,13 +13,20 @@ brew install ttyd          # tmux & glab assumed already installed
 ## Run
 
 ```bash
-./launch.sh                # starts server + opens chromeless Chrome --app window
-# or: python3 server.py    # plain server, open http://127.0.0.1:8765 yourself
+open -a "Claude Issue Tracker"   # Electron app — auto-starts the server
+# or: ./launch.sh               # supervisor with hotkeys (r=restart, q=quit)
+# or: python3 server.py         # plain server, open http://127.0.0.1:8765 yourself
 ```
 
-`launch.sh` boots the server (if not already up) and opens the dashboard in a
-Chrome `--app` window with its own profile dir so it gets a separate Dock icon.
-Falls back to Brave, then the default browser. Logs land in
+The Electron app is the primary way to run the dashboard. It auto-starts
+`server.py` if no server is already listening, manages the server lifecycle,
+and quits both app and server on Cmd+Q. Use **Cmd+Shift+R** to restart the
+server and reload the frontend.
+
+Build/rebuild the Electron app with `make app` (requires Node.js).
+
+`launch.sh` is an alternative that runs a terminal supervisor with single-key
+hotkeys (`r` restart, `l` logs, `o` re-open browser, `q` quit). Logs land in
 `${TMPDIR}/issue-tracker.log`.
 
 ## Sessions
@@ -77,10 +84,10 @@ running Claude outside tmux costs nothing.
 
 ## External links
 
-The Chrome `--app` window keeps `target=_blank` clicks inside the app. A global
-click handler intercepts off-origin links and POSTs them to `/external`, which
-shells out to `open <url>` so they land in the system default browser (Arc,
-Safari, etc.).
+The Electron app opens external links in the system default browser. Links in
+the main page are intercepted via `will-navigate` / `setWindowOpenHandler`;
+links inside ttyd iframes are handled by patching `window.open` to POST to
+`/external`, which shells out to `open <url>`.
 
 ## Theme
 
