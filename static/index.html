@@ -196,6 +196,10 @@
     background: rgba(79,140,255,0.12); border-left-color: var(--accent);
   }
   .ss-item.disabled { opacity: 0.4; cursor: not-allowed; }
+  .ss-item.ss-create .ss-title { color: var(--green); }
+  .ss-item.ss-create::before {
+    content: "+ "; color: var(--green); font-weight: 600;
+  }
   .ss-title { color: var(--fg); font-size: 13px; }
   .ss-sub   { color: var(--muted); font-size: 11px; margin-top: 2px; }
 </style>

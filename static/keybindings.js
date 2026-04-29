@@ -191,8 +191,27 @@ function getAllSessions() {
     const sub   = (subEl?.textContent   || "").trim().replace(/\s+/g, " ");
     const label = iid ? `${iid} ${title}` : title;
     const openable = !(el.style.opacity && parseFloat(el.style.opacity) < 1);
-    return { el, label, sub, openable };
+    const sessionName = el.dataset.session || "";
+    return {
+      kind: "existing", el, label, sub, openable, sessionName,
+      run: () => { el.click(); el.scrollIntoView({ block: "nearest" }); },
+    };
   });
+}
+
+// Server-side validation regex (mirrored): server.py NAME_SAFE_RE.
+const SESSION_NAME_RE = /^[a-zA-Z0-9_.-]+$/;
+
+async function createAndOpenSession(name) {
+  try {
+    const res = await fetch(`/api/by-name/${encodeURIComponent(name)}/create`, { method: "POST" });
+    if (!res.ok) throw new Error(await res.text());
+  } catch (e) {
+    alert(`Failed to create session "${name}": ${e.message}`);
+    return;
+  }
+  if (typeof refreshAll === "function") { try { await refreshAll(); } catch {} }
+  if (typeof openOther === "function") openOther(name);
 }
 
 // Tiny fuzzy match: returns a score (lower = better) or -1 for no match.
@@ -219,7 +238,6 @@ function showSwitcher() {
   if (existing) { existing.remove(); return; }
 
   const sessions = getAllSessions();
-  if (sessions.length === 0) return;
   let selectedIdx = 0;
   let filtered = sessions.map(s => ({ s, score: 0 }));
 
@@ -227,7 +245,7 @@ function showSwitcher() {
   overlay.id = "session-switcher";
   overlay.innerHTML = `
     <div class="ss-inner" role="dialog" aria-label="Switch session">
-      <input type="text" id="ss-input" placeholder="Type to filter sessions…" autocomplete="off" spellcheck="false">
+      <input type="text" id="ss-input" placeholder="Type to filter or create a session…" autocomplete="off" spellcheck="false">
       <ul id="ss-list"></ul>
     </div>
   `;
@@ -242,9 +260,22 @@ function showSwitcher() {
       .map(s => ({ s, score: fuzzyScore(s.label, q) }))
       .filter(x => x.score >= 0)
       .sort((a, b) => a.score - b.score);
+    // If query is a valid session name and no existing session matches it
+    // exactly, offer "Create new session" as the last entry.
+    if (q && SESSION_NAME_RE.test(q)
+        && !sessions.some(s => s.sessionName === q)) {
+      filtered.push({
+        s: {
+          kind: "create", label: `Create new session: ${q}`,
+          sub: "claude + nvim split", openable: true,
+          run: () => createAndOpenSession(q),
+        },
+        score: 0,
+      });
+    }
     if (selectedIdx >= filtered.length) selectedIdx = Math.max(0, filtered.length - 1);
     list.innerHTML = filtered.map(({ s }, i) => `
-      <li class="ss-item${i === selectedIdx ? " selected" : ""}${s.openable ? "" : " disabled"}" data-idx="${i}">
+      <li class="ss-item${i === selectedIdx ? " selected" : ""}${s.openable ? "" : " disabled"}${s.kind === "create" ? " ss-create" : ""}" data-idx="${i}">
         <div class="ss-title">${escapeHtml(s.label)}</div>
         ${s.sub ? `<div class="ss-sub">${escapeHtml(s.sub)}</div>` : ""}
       </li>
@@ -257,8 +288,7 @@ function showSwitcher() {
     const target = filtered[idx]?.s;
     if (!target || !target.openable) return;
     overlay.remove();
-    target.el.click();
-    target.el.scrollIntoView({ block: "nearest" });
+    target.run();
   }
 
   input.addEventListener("input", () => { selectedIdx = 0; render(); });

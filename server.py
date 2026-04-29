@@ -200,6 +200,31 @@ def _focus_session_in_terminal(session_name: str) -> int:
     return switched
 
 
+def _create_named_session(name: str) -> str:
+    """Create a tmux session with the user's default claude+nvim layout.
+
+    Idempotent: if a session already exists with that name, return as-is.
+    Uses `fresh_claude` (defined in ~/.zshrc) for the standard layout, with a
+    bare-tmux fallback if the function fails to produce a session.
+    """
+    if name in _list_tmux_session_names():
+        return name
+    subprocess.run(
+        ["zsh", "-ic", f"fresh_claude {name}"],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        timeout=15,
+    )
+    has = subprocess.run(
+        ["tmux", "has-session", "-t", f"={name}"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    if has.returncode != 0:
+        subprocess.run(["tmux", "new-session", "-d", "-s", name], check=True)
+    return name
+
+
 def _kill_tmux_session(session_name: str) -> None:
     """Kill the tmux session and any ttyd we spawned for it."""
     with _sessions_lock:
@@ -643,6 +668,24 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(200, {
                 "ok": True, "session": session_name, "clients_switched": switched,
             })
+            return
+        # /api/by-name/<name>/create — creates if missing, idempotent.
+        # Listed before the existence-check block below.
+        if (len(parts) == 4 and parts[0] == "api" and parts[1] == "by-name"
+                and parts[3] == "create"):
+            name = parts[2]
+            if not NAME_SAFE_RE.match(name):
+                self._send_json(400, {"error": "invalid session name"})
+                return
+            try:
+                _create_named_session(name)
+            except subprocess.CalledProcessError as e:
+                self._send_json(500, {"error": str(e)})
+                return
+            except FileNotFoundError as e:
+                self._send_json(500, {"error": f"missing binary: {e}"})
+                return
+            self._send_json(200, {"ok": True, "session": name})
             return
         # /api/by-name/<name>/{open,focus-terminal,kill} — for any session.
         if (len(parts) == 4 and parts[0] == "api" and parts[1] == "by-name"
