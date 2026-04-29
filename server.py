@@ -11,6 +11,7 @@ import json
 import os
 import re
 import select
+import signal
 import socket
 import subprocess
 import sys
@@ -197,6 +198,28 @@ def _focus_session_in_terminal(session_name: str) -> int:
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
     return switched
+
+
+def _kill_tmux_session(session_name: str) -> None:
+    """Kill the tmux session and any ttyd we spawned for it."""
+    with _sessions_lock:
+        stale_slots = [
+            slot for slot, info in _sessions.items()
+            if info.get("session") == session_name
+        ]
+        for slot in stale_slots:
+            info = _sessions.pop(slot, None)
+            if info and _pid_alive(info["pid"]):
+                try:
+                    os.kill(info["pid"], 15)
+                except OSError:
+                    pass
+    subprocess.run(
+        ["tmux", "kill-session", "-t", f"={session_name}"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    with _claude_lock:
+        _claude_state.pop(session_name, None)
 
 
 def _other_session_names() -> list[str]:
@@ -621,15 +644,19 @@ class Handler(BaseHTTPRequestHandler):
                 "ok": True, "session": session_name, "clients_switched": switched,
             })
             return
-        # /api/by-name/<name>/{open,focus-terminal} — for non-issue sessions.
+        # /api/by-name/<name>/{open,focus-terminal,kill} — for any session.
         if (len(parts) == 4 and parts[0] == "api" and parts[1] == "by-name"
-                and parts[3] in ("open", "focus-terminal")):
+                and parts[3] in ("open", "focus-terminal", "kill")):
             name = parts[2]
             if not NAME_SAFE_RE.match(name):
                 self._send_json(400, {"error": "invalid session name"})
                 return
             if name not in _list_tmux_session_names():
                 self._send_json(404, {"error": "no such tmux session"})
+                return
+            if parts[3] == "kill":
+                _kill_tmux_session(name)
+                self._send_json(200, {"ok": True, "session": name})
                 return
             if parts[3] == "focus-terminal":
                 switched = _focus_session_in_terminal(name)
@@ -689,6 +716,11 @@ def main() -> None:
         print("warning: 'glab' not in PATH — GitLab issues disabled, tmux sessions only", file=sys.stderr)
     _cleanup_owned_ttyd()
     httpd = ThreadingHTTPServer(("127.0.0.1", LISTEN_PORT), Handler)
+    # SIGTERM (e.g. from the Electron wrapper) should run the cleanup `finally`
+    # so spawned ttyd children don't leak.
+    def _shutdown(signum, frame):
+        threading.Thread(target=httpd.shutdown, daemon=True).start()
+    signal.signal(signal.SIGTERM, _shutdown)
     print(f"issue-tracker: http://127.0.0.1:{LISTEN_PORT}")
     try:
         httpd.serve_forever()

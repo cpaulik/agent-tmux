@@ -86,6 +86,14 @@
   .state.claude-working { color: #d79921; }
   .state.claude-waiting { color: var(--red); }
   .meta { flex: 1; min-width: 0; }
+  .kill-btn {
+    flex: 0 0 auto; background: transparent; color: var(--muted);
+    border: 0; padding: 0 4px; font-size: 16px; line-height: 1;
+    cursor: pointer; opacity: 0; transition: opacity 0.1s, color 0.1s;
+    align-self: center;
+  }
+  li.issue:hover .kill-btn { opacity: 1; }
+  .kill-btn:hover { color: var(--red); }
   .meta .title { font-weight: 500; color: var(--fg); display: block; word-wrap: break-word; }
   .meta .sub { color: var(--muted); font-size: 11px; margin-top: 2px; display: flex; gap: 8px; align-items: center; }
   .meta .sub a { color: var(--muted); text-decoration: none; }

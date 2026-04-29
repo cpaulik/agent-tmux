@@ -39,20 +39,65 @@ function isServerUp() {
   });
 }
 
-async function startServer() {
-  if (await isServerUp()) return;
-  const logPath = path.join(os.tmpdir(), 'issue-tracker.log');
-  const logFd = fs.openSync(logPath, 'a');
-  serverProcess = spawn('python3', ['server.py'], {
-    cwd: serverDir,
-    stdio: ['ignore', logFd, logFd],
+// Kill any process listening on PORT — handles orphans from a previous crash.
+function killPortHolders(port) {
+  return new Promise((resolve) => {
+    const sh = spawn('sh', ['-c',
+      `pids=$(lsof -ti tcp:${port} -sTCP:LISTEN 2>/dev/null); ` +
+      `if [ -n "$pids" ]; then kill -TERM $pids 2>/dev/null; sleep 0.3; ` +
+      `kill -KILL $pids 2>/dev/null; fi; true`]);
+    sh.on('exit', () => resolve());
+    sh.on('error', () => resolve());
   });
-  fs.closeSync(logFd);
+}
+
+// Use home dir, not tmpdir — macOS GUI apps get a private /var/folders tmpdir
+// that's hard to find; ~/issue-tracker-*.log is always reachable.
+const ELECTRON_LOG = path.join(os.homedir(), 'issue-tracker-electron.log');
+function elog(msg) {
+  try { fs.appendFileSync(ELECTRON_LOG, `[${new Date().toISOString()}] ${msg}\n`); } catch {}
+}
+
+async function startServer() {
+  elog(`startServer: serverDir=${serverDir} PORT=${PORT}`);
+  // Always start fresh: an orphan on PORT would be running stale code.
+  await killPortHolders(PORT);
+  for (let i = 0; i < 20; i++) {
+    if (!(await isServerUp())) break;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  const logPath = path.join(os.homedir(), 'issue-tracker.log');
+  let logFd = -1;
+  try { logFd = fs.openSync(logPath, 'a'); } catch (e) { elog(`open log failed: ${e}`); }
+  // GUI-launched apps on macOS get a minimal PATH that excludes Homebrew —
+  // server.py needs tmux/ttyd/glab on PATH, so prepend the usual locations.
+  const extraPath = ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin', '/usr/sbin', '/sbin'];
+  const env = {
+    ...process.env,
+    PATH: [...extraPath, process.env.PATH || ''].filter(Boolean).join(':'),
+  };
+  try {
+    serverProcess = spawn('python3', ['server.py'], {
+      cwd: serverDir,
+      stdio: ['ignore', logFd >= 0 ? logFd : 'ignore', logFd >= 0 ? logFd : 'ignore'],
+      env,
+    });
+  } catch (e) {
+    elog(`spawn failed: ${e}`);
+    return false;
+  }
+  if (logFd >= 0) fs.closeSync(logFd);
+  serverProcess.on('error', (e) => elog(`server process error: ${e}`));
+  serverProcess.on('exit', (code, sig) => {
+    elog(`server exited code=${code} sig=${sig}`);
+    serverProcess = null;
+  });
   for (let i = 0; i < 50; i++) {
     await new Promise((r) => setTimeout(r, 200));
-    if (await isServerUp()) return;
+    if (await isServerUp()) { elog('server up'); return true; }
   }
-  console.error('server failed to start — check', logPath);
+  elog(`server failed to come up — see ${logPath}`);
+  return false;
 }
 
 function saveWindowState() {
@@ -161,9 +206,18 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
-  await startServer();
+  elog(`app ready; argv=${JSON.stringify(process.argv)}`);
+  const ok = await startServer();
+  elog(`startServer returned ${ok}`);
   createMenu();
   createWindow();
+  if (!ok && mainWindow) {
+    const html = `<html><body style="font:14px sans-serif;padding:24px;color:#eee;background:#222">
+      <h2>Server didn't start</h2>
+      <p>See <code>~/issue-tracker-electron.log</code> and <code>~/issue-tracker.log</code>.</p>
+      </body></html>`;
+    mainWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
+  }
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
@@ -173,6 +227,16 @@ app.on('window-all-closed', () => {
   app.quit();
 });
 
-app.on('will-quit', () => {
-  if (serverProcess && !serverProcess.killed) serverProcess.kill();
+let cleanupStarted = false;
+app.on('before-quit', (event) => {
+  if (cleanupStarted) return;
+  if (!serverProcess || serverProcess.killed) return;
+  cleanupStarted = true;
+  event.preventDefault();
+  // server.py has a SIGTERM handler that triggers its ttyd-cleanup finally.
+  try { serverProcess.kill('SIGTERM'); } catch (e) { elog(`kill SIGTERM failed: ${e}`); }
+  setTimeout(() => {
+    try { if (serverProcess) serverProcess.kill('SIGKILL'); } catch {}
+    app.exit(0);
+  }, 800);
 });

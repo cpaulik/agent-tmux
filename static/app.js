@@ -92,6 +92,8 @@ function makeIssueLi(i) {
     : "";
   const dotClass = i.claude_state
     ? `claude-${i.claude_state}` : (alive ? "alive" : "");
+  const killBtn = i.tmux_session
+    ? `<button class="kill-btn" title="Kill tmux session ${escapeHtml(i.tmux_session)}">×</button>` : "";
   li.innerHTML = `
     <span class="dot ${dotClass}"></span>
     <div class="meta">
@@ -101,16 +103,47 @@ function makeIssueLi(i) {
       </span>
       ${sub}
       <div class="sub mr-row" data-mr-iid="${i.iid}"></div>
-    </div>`;
+    </div>
+    ${killBtn}`;
   li.dataset.slot = slotKey;
   if (i.tmux_session) li.dataset.session = i.tmux_session;
   li.dataset.claudeTs = String(i.claude_ts || 0);
+  const kb = li.querySelector(".kill-btn");
+  if (kb) kb.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    killSession(i.tmux_session, slotKey);
+  });
   li.addEventListener("click", (ev) => {
     if (ev.target.closest("a")) return;
+    if (ev.target.closest(".kill-btn")) return;
     loadMRs(i.iid);
     openIssue(i);
   });
   return li;
+}
+
+async function killSession(name, slotKey) {
+  if (!name) return;
+  if (!confirm(`Kill tmux session "${name}"?`)) return;
+  try {
+    const res = await fetch(`/api/by-name/${encodeURIComponent(name)}/kill`, { method: "POST" });
+    if (!res.ok) throw new Error(await res.text());
+  } catch (e) {
+    alert(`Failed to kill ${name}: ${e.message}`);
+    return;
+  }
+  // Drop the pane if it's mounted.
+  if (slotKey && panes.has(slotKey)) {
+    const pane = panes.get(slotKey);
+    pane.remove();
+    panes.delete(slotKey);
+    if (activeSlot === slotKey) {
+      activeSlot = null;
+      placeholderEl.textContent = `Killed ${name}`;
+      placeholderEl.style.display = "";
+    }
+  }
+  refreshAll();
 }
 
 function showPane(slotKey) {
@@ -255,17 +288,28 @@ function renderOtherSessions(items) {
       ? `claude-${s.claude_state}` : (s.ttyd_port ? "alive" : "");
     const stateBadge = s.claude_state
       ? `<div class="sub"><span class="state claude-${s.claude_state}" title="claude: ${s.claude_state}">${s.claude_state}</span></div>` : "";
+    const killBtn = s.openable
+      ? `<button class="kill-btn" title="Kill tmux session ${escapeHtml(s.name)}">×</button>` : "";
     li.innerHTML = `
       <span class="dot ${dotClass}"></span>
       <div class="meta">
         <span class="title">${escapeHtml(s.name)}</span>
         ${stateBadge}
-      </div>`;
+      </div>
+      ${killBtn}`;
     li.dataset.slot = slotKey;
     li.dataset.session = s.name;
     li.dataset.claudeTs = String(s.claude_ts || 0);
+    const kb = li.querySelector(".kill-btn");
+    if (kb) kb.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      killSession(s.name, slotKey);
+    });
     if (s.openable) {
-      li.addEventListener("click", () => openOther(s.name));
+      li.addEventListener("click", (ev) => {
+        if (ev.target.closest(".kill-btn")) return;
+        openOther(s.name);
+      });
     } else {
       li.style.opacity = "0.5";
       li.title = "session name has unsupported characters";
