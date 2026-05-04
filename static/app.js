@@ -261,8 +261,7 @@ function openIssue(issue) {
   });
 }
 
-function openOther(name) {
-  const slotId = `n-${name}`;
+function openOther(name, slotId) {
   return openSlot({
     slotKey: slotId,
     proxyId: slotId,
@@ -297,7 +296,7 @@ function renderOtherSessions(items) {
   otherCountEl.textContent = `(${items.length})`;
   otherEl.innerHTML = "";
   for (const s of items) {
-    const slotKey = `n-${s.name}`;
+    const slotKey = s.slot_id || `n-${s.name}`;
     const li = document.createElement("li");
     li.className = "issue other";
     if (activeSlot === slotKey) li.classList.add("active");
@@ -325,7 +324,7 @@ function renderOtherSessions(items) {
     if (s.openable) {
       li.addEventListener("click", (ev) => {
         if (ev.target.closest(".kill-btn")) return;
-        openOther(s.name);
+        openOther(s.name, slotKey);
       });
     } else {
       li.style.opacity = "0.5";

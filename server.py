@@ -19,7 +19,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 PROJECT_ID = os.environ.get("ISSUE_TRACKER_PROJECT_ID", "11220")
 ASSIGNEE = os.environ.get("ISSUE_TRACKER_ASSIGNEE", "christoph")
@@ -73,6 +73,10 @@ _claude_lock = threading.Lock()
 _claude_state: dict[str, dict] = {}
 # Hooks may fire just after Claude exits; treat older entries as stale.
 CLAUDE_STATE_TTL = 12 * 60 * 60  # seconds
+
+# Issue IIDs from the last /api/issues fetch; used by _other_session_names to
+# avoid hiding sessions whose issue vanished from the list (e.g. unassigned).
+_known_issue_iids: set[str] = set()
 
 
 def _find_free_port(start: int) -> int:
@@ -248,10 +252,12 @@ def _kill_tmux_session(session_name: str) -> None:
 
 
 def _other_session_names() -> list[str]:
-    """tmux sessions that aren't bound to any issue."""
-    issue_session_names = set(_sessions_by_issue().values())
+    """tmux sessions that aren't bound to a displayed issue."""
+    issue_sessions = _sessions_by_issue()
+    excluded = {name for iid, name in issue_sessions.items()
+                if iid in _known_issue_iids}
     return sorted(name for name in _list_tmux_session_names()
-                  if name not in issue_session_names)
+                  if name not in excluded)
 
 
 def _claude_rec_for(session_name: str | None) -> dict | None:
@@ -378,7 +384,7 @@ def _cleanup_owned_ttyd() -> None:
 
 
 PROXY_PATH_RE = re.compile(r"^/ttyd/([a-zA-Z0-9_.-]+)(/.*)?$")
-NAME_SAFE_RE = re.compile(r"^[a-zA-Z0-9_.-]+$")
+NAME_SAFE_RE = re.compile(r"^[a-zA-Z0-9_./-]+$")
 HOP_BY_HOP = {
     "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
     "te", "trailer", "transfer-encoding", "upgrade",
@@ -539,6 +545,8 @@ class Handler(BaseHTTPRequestHandler):
             except subprocess.CalledProcessError as e:
                 self._send_json(500, {"error": f"glab failed: {e}"})
                 return
+            global _known_issue_iids
+            _known_issue_iids = {str(i["iid"]) for i in issues}
             sessions_map = _sessions_by_issue()
             with _sessions_lock:
                 ports = {k: v["port"] for k, v in _sessions.items()
@@ -585,7 +593,7 @@ class Handler(BaseHTTPRequestHandler):
             result = []
             for name in _other_session_names():
                 openable = bool(NAME_SAFE_RE.match(name))
-                slot_id = f"n-{name}" if openable else None
+                slot_id = f"n-{name.replace('/', '--')}" if openable else None
                 result.append({
                     "name": name,
                     "slot_id": slot_id,
@@ -673,7 +681,7 @@ class Handler(BaseHTTPRequestHandler):
         # Listed before the existence-check block below.
         if (len(parts) == 4 and parts[0] == "api" and parts[1] == "by-name"
                 and parts[3] == "create"):
-            name = parts[2]
+            name = unquote(parts[2])
             if not NAME_SAFE_RE.match(name):
                 self._send_json(400, {"error": "invalid session name"})
                 return
@@ -690,7 +698,7 @@ class Handler(BaseHTTPRequestHandler):
         # /api/by-name/<name>/{open,focus-terminal,kill} — for any session.
         if (len(parts) == 4 and parts[0] == "api" and parts[1] == "by-name"
                 and parts[3] in ("open", "focus-terminal", "kill")):
-            name = parts[2]
+            name = unquote(parts[2])
             if not NAME_SAFE_RE.match(name):
                 self._send_json(400, {"error": "invalid session name"})
                 return
@@ -708,7 +716,7 @@ class Handler(BaseHTTPRequestHandler):
                 })
                 return
             # open
-            slot_id = f"n-{name}"
+            slot_id = f"n-{name.replace('/', '--')}"
             try:
                 port = _ensure_ttyd(slot_id, name)
             except Exception as e:
