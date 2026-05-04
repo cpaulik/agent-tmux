@@ -215,12 +215,29 @@ async function openSlot(cfg) {
     const iframe = pane.querySelector("iframe");
     iframe.addEventListener("load", () => {
       try {
-        iframe.contentWindow.open = function(openUrl) {
-          fetch("/external", {
-            method: "POST",
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: "url=" + encodeURIComponent(openUrl),
+        iframe.contentWindow.open = function(url) {
+          if (url && /^https?:/.test(String(url))) {
+            fetch("/external", {
+              method: "POST",
+              headers: { "Content-Type": "application/x-www-form-urlencoded" },
+              body: "url=" + encodeURIComponent(url),
+            });
+            return null;
+          }
+          const loc = {};
+          Object.defineProperty(loc, "href", {
+            get() { return ""; },
+            set(val) {
+              if (/^https?:/.test(String(val))) {
+                fetch("/external", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                  body: "url=" + encodeURIComponent(val),
+                });
+              }
+            },
           });
+          return { opener: null, location: loc, focus() {}, close() {} };
         };
       } catch {}
     });
